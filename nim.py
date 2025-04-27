@@ -4,38 +4,11 @@ import random
 import pygame
 from socket import *
 
-clientSock = socket(AF_INET, SOCK_STREAM)
-clientSock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-clientSock.bind(('', 0))
-clientSock.listen(32)
-
-PORT = clientSock.getsockname()[1]
-
-def Connect(peerIP, peerPort):
-    peerConn = socket(AF_INET, SOCK_STREAM)
-    peerConn.connect((peerIP, int(peerPort)))
-
-def getLocalIPAddress():
-    s = socket(AF_INET, SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))
-    return s.getsockname()[0]
 
 class game(object):
     def __init__(self, piles):
         self.piles = piles
-        '''
-        self.WIDTH, self.HEIGHT = 800, 600
-        self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
-        pygame.display.set_caption("Nim Game")
-        
-        # Colors
-        self.WHITE = (255, 255, 255)
-        self.BLACK = (0, 0, 0)
-        self.RED = (255, 100, 100)
-        self.BLUE = (100, 100, 255)
 
-        self.font = pygame.font.SysFont(None, 48)
-        '''
     def move(self, player, pile, count):
         self.piles[pile] -= count
 
@@ -58,46 +31,169 @@ class game(object):
     def legalQ(self, pile, count):
         return 0 <= pile < len(self.piles) and 1 <= count <= self.piles[pile]
 
-    def displayPiles(self):
-        print("Piles: ", self.piles)
+    def getPilesList(self):
+        #print("Piles: ", self.piles)
+        return self.piles
 
-    '''
-    def draw_piles(self, current_player):
-        self.screen.fill(self.WHITE)
-        pile_positions = [150, 400, 650]  # X-positions for each pile
+def startConnection():
+    clientSock = socket(AF_INET, SOCK_STREAM)
+    clientSock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+    clientSock.bind(('', 0))
+    clientSock.listen(1)
+    PORT = clientSock.getsockname()[1]
+    print(f"Waiting for a player to connect at {getLocalIPAddress()}:{PORT}...")
+    conn, addr = clientSock.accept()
+    print(f"Connected by {addr}")
+    return conn
 
-        for i, count in enumerate(self.piles):
-            x = pile_positions[i]
-            
-            if count == 0:
-                continue  # Nothing to draw
+def joinConnection(ip, port):
+    peerSock = socket(AF_INET, SOCK_STREAM)
+    peerSock.connect((ip, int(port)))
+    print(f"Connected to {ip}:{port}")
+    return peerSock
 
-            # Calculate starting Y position
-            start_y = self.HEIGHT // 2 + 100  # start a bit lower
-            
-            for j in range(count):
-                pygame.draw.circle(self.screen, self.RED, (x, start_y - j * 40), 20)
+def getLine(conn):
+    msg = b''
+    while True:
+        ch = conn.recv(1)
+        msg += ch
+        if ch == b'\n' or len(ch) == 0:
+            break
+    return msg.decode().strip()
 
-        # Draw player turn text
-        text = self.font.render(f"Player {current_player}'s Turn", True, self.BLACK)
-        self.screen.blit(text, (self.WIDTH // 2 - 150, 50))
+def recvall(self, conn, msgLength):
+    msg = b''
+    while len(msg) < msgLength:
+        retVal = conn.recv(msgLength - len(msg))
+        msg += retVal
+        if len(retVal) == 0:
+            break    
+    return msg
 
-        pygame.display.flip()
-    '''
+def getLocalIPAddress():
+    s = socket(AF_INET, SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    return s.getsockname()[0]
 
+def sendPilesList(conn, piles, gameOver=False):
+    if gameOver:
+        conn.send("GAMEOVER\n".encode())
+    else:
+        conn.send(f"{len(piles)}\n".encode())
+        for pile in piles:
+            conn.send(f"{pile}\n".encode())
 
+def receivePilesList(conn):
+    line = getLine(conn)
+
+    if line == "GAMEOVER":
+        return "Game Over"
+
+    lengthPiles = int(line)
+
+    piles = []
+    
+    for _ in range(lengthPiles):
+        pile = int(getLine(conn))
+        piles.append(pile)
+    
+    return piles
+
+def player1(conn, firstMove):
+    if firstMove:
+        piles = [random.randint(1, 7) for _ in range(3)]
+    else:
+        piles = receivePilesList(conn)
+
+    print(f"Piles: {piles}")
+    nim = game(piles)
+    loop = True
+    while loop:
+        try:
+            print(f"Player1's move:")
+            pile = int(input("Enter pile number: ")) - 1
+            count = int(input("Enter number to remove: "))
+
+            if not nim.legalQ(pile, count):
+                raise ValueError("Invalid move!")
+
+            nim.move(1, pile, count)
+            updatedPilesList = nim.getPilesList()
+
+            sendPilesList(conn, updatedPilesList, gameOver=False) 
+            loop = False
+
+            if nim.isTerminal(nim.piles, 1)[0]:
+                print(f"Player1 loses! Player2 wins!")
+                sendPilesList(conn, [], gameOver=True) 
+                return False
+
+        except ValueError as e:
+            print(e)
+            loop = True
+    
+    return True
+
+def player2(conn):
+    piles = receivePilesList(conn)
+
+    print(f"Piles: {piles}")
+    nim = game(piles)
+    loop = True 
+
+    while loop:
+        try:
+            print(f"Player2's move:")
+            pile = int(input("Enter pile number: ")) - 1
+            count = int(input("Enter number to remove: "))
+
+            if not nim.legalQ(pile, count):
+                raise ValueError("Invalid move!")
+
+            nim.move(2, pile, count)
+            updatedPilesList = nim.getPilesList()
+
+            sendPilesList(conn, updatedPilesList, gameOver=False) 
+            loop = False
+
+            if nim.isTerminal(nim.piles, 2)[0]:
+                print(f"Player2 loses! Player1 wins!")
+                sendPilesList(conn, [], gameOver=True) 
+                return False
+
+        except ValueError as e:
+            print(e)
+            loop = True
+    
+    return True
 
 def main():
 
     if len(sys.argv) == 3: # You are connecting to someone who already has the game started
-        Connect(sys.argv[1], sys.argv[2])
-        print(f"Connected to: {sys.argv[1]}, {sys.argv[2]}")
+        ip = sys.argv[1]
+        port = sys.argv[2]
+        conn = joinConnection(ip, port)
 
-    else:
-        print(f"IP : {getLocalIPAddress()} : {PORT}")
+        isPlayer1 = False
+        firstMove = False
 
-    while True:
-        pass
+    else: # The person is starting the connection/ game
+        conn = startConnection()
+
+        isPlayer1 = True
+        firstMove = True 
+
+    playing = True
+
+    while playing:
+        if isPlayer1:
+            playing = player1(conn, firstMove)
+            firstMove = False # After first move, no need to generate piles again
+        else:
+            playing = player2(conn)    
+
+    #while True:
+    #    pass
 
     '''
     #pygame.init()
