@@ -87,7 +87,7 @@ def receivePilesList(conn):
     line = getLine(conn)
 
     if line == "GAMEOVER":
-        return "Game Over"
+        return
 
     lengthPiles = int(line)
 
@@ -105,6 +105,12 @@ def player1(conn, firstMove):
     else:
         piles = receivePilesList(conn)
 
+    if not piles:
+        print("Player2 loses! Player1 wins!")
+        conn.close()
+        return False
+        
+
     print(f"Piles: {piles}")
     nim = game(piles)
     loop = True
@@ -120,12 +126,17 @@ def player1(conn, firstMove):
             nim.move(1, pile, count)
             updatedPilesList = nim.getPilesList()
 
-            sendPilesList(conn, updatedPilesList, gameOver=False) 
+            if updatedPilesList == [0, 0, 0]:
+                sendPilesList(conn, [], gameOver=True) 
+
+            else:
+                sendPilesList(conn, updatedPilesList, gameOver=False)
+
             loop = False
 
             if nim.isTerminal(nim.piles, 1)[0]:
-                print(f"Player1 loses! Player2 wins!")
-                sendPilesList(conn, [], gameOver=True) 
+                print("Player1 loses! Player2 wins!")
+                conn.close()
                 return False
 
         except ValueError as e:
@@ -136,6 +147,11 @@ def player1(conn, firstMove):
 
 def player2(conn):
     piles = receivePilesList(conn)
+
+    if not piles:
+        print("Player1 loses! Player2 wins!")
+        conn.close()
+        return False
 
     print(f"Piles: {piles}")
     nim = game(piles)
@@ -153,12 +169,17 @@ def player2(conn):
             nim.move(2, pile, count)
             updatedPilesList = nim.getPilesList()
 
-            sendPilesList(conn, updatedPilesList, gameOver=False) 
+            if updatedPilesList == [0, 0, 0]:
+                sendPilesList(conn, [], gameOver=True) 
+
+            else:
+                sendPilesList(conn, updatedPilesList, gameOver=False)
+
             loop = False
 
             if nim.isTerminal(nim.piles, 2)[0]:
-                print(f"Player2 loses! Player1 wins!")
-                sendPilesList(conn, [], gameOver=True) 
+                print("Player2 loses! Player1 wins!")
+                conn.close()
                 return False
 
         except ValueError as e:
