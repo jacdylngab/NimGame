@@ -1,7 +1,6 @@
 import copy
 import sys
 import random
-import pygame
 from socket import *
 
 
@@ -48,9 +47,21 @@ def startConnection():
 
 def joinConnection(ip, port):
     peerSock = socket(AF_INET, SOCK_STREAM)
-    peerSock.connect((ip, int(port)))
-    print(f"Connected to {ip}:{port}")
-    return peerSock
+    peerSock.settimeout(10) # If you cannot connect in 30 seconds. Close the socket
+
+    try:
+        peerSock.connect((ip, int(port)))
+        print(f"Connected to {ip}:{port}")
+        peerSock.settimeout(None)
+        return peerSock
+    
+    except socket.timeout:
+        print(f"Connection attempt timed out after {timeout} seconds.")
+        sys.exit(1)
+
+    except Exception as e:
+        print(f"Failed to connect: {e}")
+        sys.exit(1)
 
 def getLine(conn):
     msg = b''
@@ -206,77 +217,26 @@ def main():
 
     playing = True
 
-    while playing:
-        if isPlayer1:
-            playing = player1(conn, firstMove)
-            firstMove = False # After first move, no need to generate piles again
-        else:
-            playing = player2(conn)    
+    try:
+        while playing:
+            if isPlayer1:
+                playing = player1(conn, firstMove)
+                firstMove = False # After first move, no need to generate piles again
+            else:
+                playing = player2(conn)
 
-    #while True:
-    #    pass
-
-    '''
-    #pygame.init()
-
-    piles = [random.randint(1, 7) for _ in range(3)]
-    nim = game(piles)
-    gameOver = False
-    players = ["Player1", "Player2"]
-    ply = 0  # Player1 goes first, starts as ply 0
-
-    nim.displayPiles()
-
-    while not gameOver:
-        loop = True
-
-        if ply % 2 == 0:  # Player1's turn
-            while loop:
-                try:
-                    print(f"{players[0]}'s move:")
-                    pile = int(input("Enter pile number: ")) - 1
-                    count = int(input("Enter number to remove: "))
-
-                    if not nim.legalQ(pile, count):
-                        raise ValueError("Invalid move!")
-
-                    nim.move(1, pile, count)
-                    nim.displayPiles()
-                    loop = False
-
-                    if nim.isTerminal(nim.piles, 1)[0]:
-                        print(f"{players[0]} loses! {players[1]} wins!")
-                        sys.exit(0)
-
-                except ValueError as e:
-                    print(e)
-                    loop = True
-
-        else:  # Player2's turn
-            while loop:
-                try:
-                    print(f"{players[1]}'s move:")
-                    pile = int(input("Enter pile number: ")) - 1
-                    count = int(input("Enter number to remove: "))
-
-                    if not nim.legalQ(pile, count):
-                        raise ValueError("Invalid move!")
-
-                    nim.move(2, pile, count)
-                    nim.displayPiles()
-                    loop = False
-
-                    if nim.isTerminal(nim.piles, 2)[0]:
-                        print(f"{players[1]} loses! {players[0]} wins!")
-                        sys.exit(0)
-
-                except ValueError as e:
-                    print(e)
-                    loop = True
-
-        ply += 1
-    '''
+    except Exception as e:
+        conn.close()
+        print(f"Error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    main()
-
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("Game interrupted. Goodbye!")
+        sys.exit(0)
+    
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
