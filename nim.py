@@ -5,13 +5,17 @@ from socket import *
 
 
 class game(object):
+    """Class to manage Nim game state and logic."""
     def __init__(self, piles):
+        """Initialize the game with a given list of pile counts."""
         self.piles = piles
 
     def move(self, player, pile, count):
+        """Apply a move by reducing 'count' objects from 'pile'."""
         self.piles[pile] -= count
 
     def availableActions(self, piles):
+        """Return all legal (pile, count) moves available."""
         actions = []
         for i in range(len(piles)):
             if piles[i] > 0:  # Only consider piles that have objects
@@ -20,6 +24,7 @@ class game(object):
         return actions
 
     def isTerminal(self, piles, current_player):
+        """Check if the game is over. Return (True, winner) or (False, 0)."""
         if all(pile == 0 for pile in piles):
             if current_player == 1:
                 return True, 1
@@ -28,13 +33,20 @@ class game(object):
             return False, 0
 
     def legalQ(self, pile, count):
+        """Check if removing 'count' from 'pile' is a legal move."""
         return 0 <= pile < len(self.piles) and 1 <= count <= self.piles[pile]
 
     def getPilesList(self):
+        """Return a copy of current piles state."""
         #print("Piles: ", self.piles)
         return self.piles
+    
+#####################################################################################
+########################### NETWORKING FUNCTIONS ####################################
+#####################################################################################
 
 def startConnection():
+    """Start a server and wait for another player to connect."""
     clientSock = socket(AF_INET, SOCK_STREAM)
     clientSock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     clientSock.bind(('', 0))
@@ -46,6 +58,7 @@ def startConnection():
     return conn
 
 def joinConnection(ip, port):
+    """Connect to another player's game as a client."""
     peerSock = socket(AF_INET, SOCK_STREAM)
     peerSock.settimeout(10) # If you cannot connect in 30 seconds. Close the socket
 
@@ -64,6 +77,7 @@ def joinConnection(ip, port):
         sys.exit(1)
 
 def getLine(conn):
+    """Receive a line of text from the connection."""
     msg = b''
     while True:
         ch = conn.recv(1)
@@ -73,6 +87,7 @@ def getLine(conn):
     return msg.decode().strip()
 
 def recvall(self, conn, msgLength):
+    """Receive a fixed amount of bytes from the connection."""
     msg = b''
     while len(msg) < msgLength:
         retVal = conn.recv(msgLength - len(msg))
@@ -82,11 +97,13 @@ def recvall(self, conn, msgLength):
     return msg
 
 def getLocalIPAddress():
+    """Get the local IP address of this machine."""
     s = socket(AF_INET, SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
     return s.getsockname()[0]
 
 def sendPilesList(conn, piles, gameOver=False):
+    """Send the list of piles to the opponent over the connection."""
     if gameOver:
         conn.send("GAMEOVER\n".encode())
     else:
@@ -95,6 +112,7 @@ def sendPilesList(conn, piles, gameOver=False):
             conn.send(f"{pile}\n".encode())
 
 def receivePilesList(conn):
+    """Receive the list of piles from the opponent over the connection."""
     line = getLine(conn)
 
     if line == "GAMEOVER":
@@ -110,7 +128,12 @@ def receivePilesList(conn):
     
     return piles
 
+#####################################################################################
+################################ PLAYER LOGIC #######################################
+#####################################################################################
+
 def player1(conn, firstMove):
+    """Handle Player 1's moves. First move creates piles, then normal play."""
     if firstMove:
         piles = [random.randint(1, 7) for _ in range(3)]
     else:
@@ -157,6 +180,7 @@ def player1(conn, firstMove):
     return True
 
 def player2(conn):
+    """Handle Player 2's moves (always receives piles first)."""
     piles = receivePilesList(conn)
 
     if not piles:
@@ -199,8 +223,12 @@ def player2(conn):
     
     return True
 
-def main():
+#####################################################################################
+############################### MAIN GAME LOOP ######################################
+#####################################################################################
 
+def main():
+    """Main game flow: handles connection setup and turn-taking."""
     if len(sys.argv) == 3: # You are connecting to someone who already has the game started
         ip = sys.argv[1]
         port = sys.argv[2]
@@ -229,6 +257,10 @@ def main():
         conn.close()
         print(f"Error: {e}")
         sys.exit(1)
+
+#####################################################################################
+################################## ENTRY POINT ######################################
+#####################################################################################
 
 if __name__ == "__main__":
     try:
